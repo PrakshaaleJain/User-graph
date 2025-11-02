@@ -9,14 +9,14 @@ let transactions = [];
 const edgeColors = {
     'SENT': '#10b981',
     'RECEIVED_BY': '#10b981',
-    'SHARED_EMAIL': '#ef4444',
-    'SHARED_PHONE': '#8b5cf6',
-    'SHARED_ADDRESS': '#ec4899',
-    'SHARED_PAYMENT_METHOD': '#3b82f6',
-    'CREDIT_TO': '#14b8a6',
-    'DEBIT_FROM': '#14b8a6',
-    'SHARED_DEVICE': '#f97316',
-    'SHARED_IP': '#f97316'
+    // 'SHARED_EMAIL': '#ef4444',
+    // 'SHARED_PHONE': '#8b5cf6',
+    // 'SHARED_ADDRESS': '#ec4899',
+    // 'SHARED_PAYMENT_METHOD': '#3b82f6',
+    // 'CREDIT_TO': '#14b8a6',
+    // 'DEBIT_FROM': '#14b8a6',
+    // 'SHARED_DEVICE': '#f97316',
+    // 'SHARED_IP': '#f97316'
 };
 
 // Initialize Cytoscape
