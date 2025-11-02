@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from .models import User, Transaction
 from . import crud, relationships
+from .database import db
 import os
 
 app = FastAPI(title="User & Transaction Graph API")
@@ -14,6 +16,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint to verify API and database connectivity"""
+    try:
+        # Test database connection
+        result = db.query("RETURN 1 AS test")
+        db_status = "connected" if result else "disconnected"
+        
+        # Get node counts
+        node_count = db.query("MATCH (n) RETURN count(n) AS count")
+        total_nodes = node_count[0]["count"] if node_count else 0
+        
+        return {
+            "status": "healthy",
+            "database": db_status,
+            "total_nodes": total_nodes,
+            "api_version": "1.0"
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e)
+            }
+        )
 
 @app.post("/users")
 def add_user(user: User):
@@ -87,7 +117,23 @@ def get_transaction_relationships_endpoint(txn_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Serve frontend
-frontend_path = os.path.join(os.path.dirname(__file__), '../frontend')
-if os.path.exists(frontend_path):
+# Mount frontend static files
+# Try multiple possible frontend locations
+frontend_dirs = [
+    os.path.join(os.path.dirname(__file__), '../frontend'),
+    os.path.join(os.getcwd(), 'frontend'),
+    '/app/frontend'  # Railway/Docker path
+]
+
+frontend_path = None
+for path in frontend_dirs:
+    if os.path.exists(path) and os.path.isdir(path):
+        frontend_path = path
+        break
+
+if frontend_path:
+    print(f"✓ Serving frontend from: {frontend_path}")
     app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+else:
+    print("⚠ Frontend directory not found. API-only mode.")
+    print(f"  Searched paths: {frontend_dirs}")
