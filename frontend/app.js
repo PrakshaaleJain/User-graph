@@ -2,21 +2,23 @@ const API_URL = window.location.origin;
 
 let cy;
 let graphData = { nodes: [], edges: [] };
+let allGraphData = { nodes: [], edges: [] }; // Store all data
 let users = [];
 let transactions = [];
+let currentView = 'transactions'; // 'transactions' or 'fraud'
 
 // Relationship type colors
 const edgeColors = {
     'SENT': '#10b981',
     'RECEIVED_BY': '#10b981',
-    // 'SHARED_EMAIL': '#ef4444',
-    // 'SHARED_PHONE': '#8b5cf6',
-    // 'SHARED_ADDRESS': '#ec4899',
-    // 'SHARED_PAYMENT_METHOD': '#3b82f6',
-    // 'CREDIT_TO': '#14b8a6',
-    // 'DEBIT_FROM': '#14b8a6',
-    // 'SHARED_DEVICE': '#f97316',
-    // 'SHARED_IP': '#f97316'
+    'SHARED_EMAIL': '#ef4444',
+    'SHARED_PHONE': '#8b5cf6',
+    'SHARED_ADDRESS': '#ec4899',
+    'SHARED_PAYMENT_METHOD': '#3b82f6',
+    'CREDIT_TO': '#14b8a6',
+    'DEBIT_FROM': '#14b8a6',
+    'SHARED_DEVICE': '#f97316',
+    'SHARED_IP': '#f97316'
 };
 
 // Initialize Cytoscape
@@ -158,17 +160,29 @@ async function loadGraph() {
     try {
         // Fetch graph data
         const response = await fetch(`${API_URL}/graph`);
-        graphData = await response.json();
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        allGraphData = await response.json();
+        console.log('Graph data loaded:', allGraphData.nodes.length, 'nodes,', allGraphData.edges.length, 'edges');
         
         // Fetch users and transactions for sidebar
         const usersResponse = await fetch(`${API_URL}/users`);
+        if (!usersResponse.ok) {
+            throw new Error(`HTTP error! status: ${usersResponse.status}`);
+        }
         users = await usersResponse.json();
+        console.log('Users loaded:', users.length);
         
         const txnsResponse = await fetch(`${API_URL}/transactions`);
+        if (!txnsResponse.ok) {
+            throw new Error(`HTTP error! status: ${txnsResponse.status}`);
+        }
         transactions = await txnsResponse.json();
+        console.log('Transactions loaded:', transactions.length);
         
-        // Process and display
-        processGraphData();
+        // Apply current view filter
+        switchView(currentView);
         renderLists();
         updateStats();
         
@@ -176,7 +190,53 @@ async function loadGraph() {
     } catch (error) {
         console.error('Error loading graph:', error);
         document.getElementById('loading').textContent = 'Error loading data. Check console.';
+        document.getElementById('loading').style.color = 'red';
     }
+}
+
+// Switch between transaction view and fraud detection view
+function switchView(view) {
+    console.log(`Switching to ${view} view...`);
+    
+    // Check if data is loaded
+    if (!allGraphData || !allGraphData.nodes || allGraphData.nodes.length === 0) {
+        console.error('No data loaded yet. Load graph first.');
+        alert('Please wait for the graph to load first!');
+        return;
+    }
+    
+    currentView = view;
+    
+    // Update button styles
+    const txnBtn = document.getElementById('transactionView');
+    const fraudBtn = document.getElementById('fraudView');
+    
+    if (txnBtn && fraudBtn) {
+        txnBtn.style.background = view === 'transactions' ? '#667eea' : '#94a3b8';
+        fraudBtn.style.background = view === 'fraud' ? '#667eea' : '#94a3b8';
+    }
+    
+    // Filter edges based on view
+    const fraudRelationships = ['SHARED_EMAIL', 'SHARED_PHONE', 'SHARED_ADDRESS', 
+                                'SHARED_PAYMENT_METHOD', 'SHARED_DEVICE', 'SHARED_IP'];
+    const transactionRelationships = ['SENT', 'RECEIVED_BY'];
+    
+    if (view === 'transactions') {
+        // Show only transaction flow
+        graphData = {
+            nodes: allGraphData.nodes,
+            edges: allGraphData.edges.filter(e => transactionRelationships.includes(e.data.type))
+        };
+    } else {
+        // Show only fraud detection relationships (shared attributes)
+        graphData = {
+            nodes: allGraphData.nodes.filter(n => n.data.type === 'user'), // Only users for fraud view
+            edges: allGraphData.edges.filter(e => fraudRelationships.includes(e.data.type))
+        };
+    }
+    
+    console.log(`Switched to ${view} view:`, graphData.nodes.length, 'nodes,', graphData.edges.length, 'edges');
+    processGraphData();
 }
 
 // Process graph data for Cytoscape

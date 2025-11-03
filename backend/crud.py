@@ -125,62 +125,69 @@ def detect_transaction_relationships(txn_id):
     db.query(update_user_links_query, {"txn_id": txn_id})
 
 def get_graph_data():
-    """Get all users, transactions and their relationships for visualization"""
+    """
+    Fetch nodes and edges for visualization
+    Includes all relationship types: transactions, shared attributes, devices, IPs
+    Ensures edges only reference nodes that exist in the result set
+    """
     nodes = []
     edges = []
+    node_ids = set()
     
-    users_result = db.query("MATCH (u:User) RETURN u LIMIT 50")
+    # Fetch users
+    users_result = db.query("MATCH (u:User) RETURN u LIMIT 200")
     for record in users_result:
         user = dict(record["u"])
+        user_id = user["user_id"]
+        node_ids.add(user_id)
         nodes.append({
             "data": {
-                "id": user["user_id"],
-                "label": user.get("name", user["user_id"]),
+                "id": user_id,
+                "label": user.get("name", user_id),
                 "type": "user",
                 **user
             }
         })
     
-    txns_result = db.query("MATCH (t:Transaction) RETURN t LIMIT 100")
+    # Fetch transactions
+    txns_result = db.query("MATCH (t:Transaction) RETURN t LIMIT 500")
     for record in txns_result:
         txn = dict(record["t"])
+        txn_id = txn["txn_id"]
+        node_ids.add(txn_id)
         nodes.append({
             "data": {
-                "id": txn["txn_id"],
+                "id": txn_id,
                 "label": f"${txn.get('amount', 0)}",
                 "type": "transaction",
                 **txn
             }
         })
     
-    sent_result = db.query("""
-        MATCH (u:User)-[:SENT]->(t:Transaction)
-        RETURN u.user_id as sender, t.txn_id as txn
-        LIMIT 100
+    # Fetch all edges but only include those where both source and target exist in node_ids
+    all_edges_result = db.query("""
+        MATCH (n)-[r]->(m)
+        RETURN DISTINCT 
+            CASE WHEN 'User' IN labels(n) THEN n.user_id ELSE n.txn_id END as source_id,
+            CASE WHEN 'User' IN labels(m) THEN m.user_id ELSE m.txn_id END as target_id,
+            type(r) as rel_type
+        LIMIT 2000
     """)
-    for record in sent_result:
-        edges.append({
-            "data": {
-                "id": f"{record['sender']}-sent-{record['txn']}",
-                "source": record["sender"],
-                "target": record["txn"],
-                "type": "SENT"
-            }
-        })
     
-    received_result = db.query("""
-        MATCH (t:Transaction)-[:RECEIVED_BY]->(u:User)
-        RETURN t.txn_id as txn, u.user_id as receiver
-        LIMIT 100
-    """)
-    for record in received_result:
-        edges.append({
-            "data": {
-                "id": f"{record['txn']}-received-{record['receiver']}",
-                "source": record["txn"],
-                "target": record["receiver"],
-                "type": "RECEIVED_BY"
-            }
-        })
+    for record in all_edges_result:
+        source_id = record["source_id"]
+        target_id = record["target_id"]
+        rel_type = record["rel_type"]
+        
+        # Only add edge if both nodes exist
+        if source_id in node_ids and target_id in node_ids:
+            edges.append({
+                "data": {
+                    "id": f"{source_id}-{rel_type}-{target_id}",
+                    "source": source_id,
+                    "target": target_id,
+                    "type": rel_type
+                }
+            })
     
     return {"nodes": nodes, "edges": edges}
